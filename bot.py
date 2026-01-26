@@ -41,7 +41,7 @@ def parse_message(text: str) -> dict | None:
     }
 
 
-def save_to_notion(title: str, category: str, content: str) -> bool:
+def save_to_notion(title: str, category: str, content: str) -> tuple[bool, str]:
     """Save entry to Notion database"""
     try:
         notion.pages.create(
@@ -72,10 +72,10 @@ def save_to_notion(title: str, category: str, content: str) -> bool:
                 }
             }
         )
-        return True
+        return True, ""
     except Exception as e:
         logger.error(f"Failed to save to Notion: {e}")
-        return False
+        return False, str(e)
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -94,7 +94,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     # Save to Notion
-    success = save_to_notion(
+    success, error = save_to_notion(
         parsed["title"],
         parsed["category"],
         parsed["content"]
@@ -108,7 +108,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
     else:
         await update.message.reply_text(
-            "❌ Failed to save to Notion. Please try again later."
+            f"❌ Failed to save to Notion:\n{error}"
         )
 
 
