@@ -117,31 +117,50 @@ def fetch_url_content(url: str) -> str | None:
         return None
 
 
+CATEGORIES = [
+    "Vibe Coding",
+    "Idea Collection",
+    "Prompts Collection",
+    "Personal Growth",
+    "Fitness",
+    "Good Design",
+    "Mental Health",
+]
+
+
 def get_category_from_claude(title: str) -> str:
     """
     Use Claude to assign a category based on the title.
     """
     try:
+        categories_list = "\n".join(f"- {c}" for c in CATEGORIES)
         message = claude.messages.create(
             model="claude-sonnet-4-20250514",
-            max_tokens=100,
+            max_tokens=50,
             messages=[
                 {
                     "role": "user",
-                    "content": f"""Based on this title, assign a single category.
-Categories should be in English, a single word or short phrase.
-Common categories: Technology, Product, Career, Design, AI, Learning, Life, Finance, Health, Entertainment, Programming, Startup, Marketing, Psychology
+                    "content": f"""Based on this title, assign ONE category from this list:
+{categories_list}
 
 Title: {title}
 
-Respond with ONLY the category name, nothing else."""
+Respond with ONLY the category name exactly as shown above, nothing else."""
                 }
             ]
         )
-        return message.content[0].text.strip()
+        category = message.content[0].text.strip()
+        # Validate category is in the list
+        if category in CATEGORIES:
+            return category
+        # Try to find a close match
+        for c in CATEGORIES:
+            if c.lower() in category.lower() or category.lower() in c.lower():
+                return c
+        return CATEGORIES[1]  # Default to "Idea Collection"
     except Exception as e:
         logger.error(f"Failed to get category from Claude: {e}")
-        return "Uncategorized"
+        return "Idea Collection"
 
 
 def get_title_and_category_from_claude(content: str, url: str) -> tuple[str, str]:
@@ -153,6 +172,7 @@ def get_title_and_category_from_claude(content: str, url: str) -> tuple[str, str
         if len(content) > 2000:
             content = content[:2000] + "..."
 
+        categories_list = "\n".join(f"- {c}" for c in CATEGORIES)
         message = claude.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=200,
@@ -161,16 +181,15 @@ def get_title_and_category_from_claude(content: str, url: str) -> tuple[str, str
                     "role": "user",
                     "content": f"""Based on this content from a URL, provide:
 1. A concise title (under 50 characters, match the source language - if content is Chinese, title should be Chinese)
-2. A category in English (single word or short phrase)
-
-Common categories: Technology, Product, Career, Design, AI, Learning, Life, Finance, Health, Entertainment, Programming, Startup, Marketing, Psychology
+2. A category from this list ONLY:
+{categories_list}
 
 URL: {url}
 Content: {content}
 
 Respond in this exact format (two lines only):
 TITLE: [your title here]
-CATEGORY: [category here]"""
+CATEGORY: [category exactly as shown above]"""
                 }
             ]
         )
@@ -179,19 +198,27 @@ CATEGORY: [category here]"""
         lines = response_text.split('\n')
 
         title = "Untitled"
-        category = "Uncategorized"
+        category = "Idea Collection"
 
         for line in lines:
             if line.startswith("TITLE:"):
                 title = line.replace("TITLE:", "").strip()
             elif line.startswith("CATEGORY:"):
-                category = line.replace("CATEGORY:", "").strip()
+                cat = line.replace("CATEGORY:", "").strip()
+                # Validate category
+                if cat in CATEGORIES:
+                    category = cat
+                else:
+                    for c in CATEGORIES:
+                        if c.lower() in cat.lower() or cat.lower() in c.lower():
+                            category = c
+                            break
 
         return title, category
 
     except Exception as e:
         logger.error(f"Failed to get title and category from Claude: {e}")
-        return "Untitled", "Uncategorized"
+        return "Untitled", "Idea Collection"
 
 
 def save_to_notion(title: str, category: str, url: str) -> tuple[bool, str]:
