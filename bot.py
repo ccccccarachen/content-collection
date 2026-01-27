@@ -71,11 +71,60 @@ def extract_message_parts(message: str) -> tuple[str | None, str | None, bool]:
         return None, url, True
 
 
+def fetch_twitter_content(url: str) -> str | None:
+    """
+    Fetch content from Twitter/X using the oembed API.
+    Returns the tweet text content.
+    """
+    try:
+        # Use Twitter's oembed API to get tweet content
+        oembed_url = f"https://publish.twitter.com/oembed?url={url}"
+        response = requests.get(oembed_url, timeout=10)
+        response.raise_for_status()
+
+        data = response.json()
+
+        # The 'html' field contains the tweet embed HTML
+        # Extract text content from it
+        if 'html' in data:
+            soup = BeautifulSoup(data['html'], 'html.parser')
+            # Get the tweet text (usually in a <p> tag within the blockquote)
+            blockquote = soup.find('blockquote')
+            if blockquote:
+                # Find all <p> tags which contain the tweet text
+                paragraphs = blockquote.find_all('p')
+                tweet_text = ' '.join(p.get_text() for p in paragraphs)
+                if tweet_text:
+                    return tweet_text.strip()
+
+        # Fallback to author_name if available
+        if 'author_name' in data:
+            return f"Tweet by {data['author_name']}"
+
+        return None
+
+    except Exception as e:
+        logger.error(f"Failed to fetch Twitter content: {e}")
+        return None
+
+
+def is_twitter_url(url: str) -> bool:
+    """Check if URL is a Twitter/X URL."""
+    return bool(re.search(r'(twitter\.com|x\.com)/\w+/status/\d+', url))
+
+
 def fetch_url_content(url: str) -> str | None:
     """
     Fetch content from URL.
-    Handles Twitter/X specially by extracting from meta tags.
+    Handles Twitter/X specially using oembed API.
     """
+    # Handle Twitter/X URLs specially
+    if is_twitter_url(url):
+        content = fetch_twitter_content(url)
+        if content:
+            return content
+        # Fall through to generic fetching if Twitter API fails
+
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -85,7 +134,7 @@ def fetch_url_content(url: str) -> str | None:
 
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Try to get og:description (works well for Twitter/X and many other sites)
+        # Try to get og:description (works well for many sites)
         og_desc = soup.find('meta', property='og:description')
         if og_desc and og_desc.get('content'):
             return og_desc['content']
