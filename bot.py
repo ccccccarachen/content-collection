@@ -166,30 +166,18 @@ def fetch_url_content(url: str) -> str | None:
         return None
 
 
-_categories_cache: list[str] = []
-
-
-def fetch_categories_from_notion() -> list[str]:
+def get_categories() -> list[str]:
     """Fetch category options from the Notion database Category property."""
-    global _categories_cache
     try:
         db = notion.databases.retrieve(database_id=NOTION_DATABASE_ID)
         category_prop = db["properties"].get("Category", {})
         if category_prop.get("type") == "select":
             options = category_prop["select"].get("options", [])
-            _categories_cache = [opt["name"] for opt in options]
-            logger.info(f"Fetched {len(_categories_cache)} categories from Notion: {_categories_cache}")
-        return _categories_cache
+            return [opt["name"] for opt in options]
+        return []
     except Exception as e:
         logger.error(f"Failed to fetch categories from Notion: {e}")
-        return _categories_cache
-
-
-def get_categories() -> list[str]:
-    """Get categories, fetching from Notion if cache is empty."""
-    if not _categories_cache:
-        fetch_categories_from_notion()
-    return _categories_cache
+        return []
 
 
 def get_category_from_claude(title: str) -> str:
@@ -484,9 +472,6 @@ def main() -> None:
     if missing_vars:
         logger.error(f"Missing environment variables: {', '.join(missing_vars)}")
         return
-
-    # Fetch categories from Notion at startup
-    fetch_categories_from_notion()
 
     # Create application
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
